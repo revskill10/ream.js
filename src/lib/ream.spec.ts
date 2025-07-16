@@ -1,43 +1,45 @@
 import test from 'ava';
+
 import {
-  isLeap,
-  daysInMonth,
-  MILLIS,
-  instant,
-  duration,
-  now,
-  dateTime,
-  fromPlain,
-  toPlain,
-  parseISO,
-  addDuration,
-  zero,
   add,
-  sub,
-  durations,
-  formatToken,
-  format,
-  dayOfWeek,
-  startOfWeek,
-  addYears,
-  addMonths,
   addDays,
-  humanize,
-  zdt,
-  zfmap,
-  UTC,
-  zone,
-  withZone,
-  toUTC,
-  offset,
-  interval,
+  addDuration,
+  addMonths,
+  addYears,
+  businessPlugin,
+  dateTime,
+  dayOfWeek,
+  daysInMonth,
+  duration,
   durationOfInterval,
+  durations,
   every,
   everyDay,
   everyMonth,
-  relativePlugin,
-  businessPlugin,
   extend,
+  format,
+  formatToken,
+  fromPlain,
+  humanize,
+  instant,
+  interval,
+  isLeap,
+  MILLIS,
+  now,
+  offset,
+  parseISO,
+  ReamDate,
+  relativePlugin,
+  startOfWeek,
+  sub,
+  toPlain,
+  toUTC,
+  UTC,
+  withZone,
+  zdt,
+  zero,
+  zfmap,
+  zone,
 } from './ream';
 import ream from './ream';
 
@@ -417,8 +419,8 @@ test('every generates recurring instants', t => {
   t.truthy(firstResult.value);
   t.truthy(secondResult.value);
 
-  const first = firstResult.value as any;
-  const second = secondResult.value as any;
+  const first = firstResult.value;
+  const second = secondResult.value;
 
   t.is(first.instant.epochMs, 1000);
   t.is(second.instant.epochMs, 2000);
@@ -434,8 +436,8 @@ test('everyDay generates daily recurrence', t => {
   t.truthy(firstResult.value);
   t.truthy(secondResult.value);
 
-  const first = firstResult.value as any;
-  const second = secondResult.value as any;
+  const first = firstResult.value;
+  const second = secondResult.value;
 
   t.is(second.instant.epochMs - first.instant.epochMs, MILLIS.DAY);
 });
@@ -457,8 +459,8 @@ test('everyMonth generates monthly recurrence', t => {
   t.truthy(firstResult.value);
   t.truthy(secondResult.value);
 
-  const first = firstResult.value as any;
-  const second = secondResult.value as any;
+  const first = firstResult.value;
+  const second = secondResult.value;
 
   // Now it should work correctly - first should be original, second should be incremented
   t.is(first.payload.m, 1);
@@ -476,7 +478,7 @@ test('relativePlugin extends ReamDate', t => {
   const extended = extend(relativePlugin)(rd);
 
   // Check that the plugin method exists
-  t.true(typeof (extended as any).fromNow === 'function');
+  t.true(typeof (extended as ReamDate & { readonly fromNow: () => string }).fromNow === 'function');
 });
 
 test('businessPlugin extends ReamDate', t => {
@@ -484,7 +486,7 @@ test('businessPlugin extends ReamDate', t => {
   const extended = extend(businessPlugin)(rd);
 
   // Check that the plugin method exists
-  t.true(typeof (extended as any).nextBusinessDay === 'function');
+  t.true(typeof (extended as ReamDate & { readonly nextBusinessDay: () => ReamDate }).nextBusinessDay === 'function');
 });
 
 /* ------------------------------------------------------------------ *
