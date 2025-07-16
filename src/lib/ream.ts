@@ -419,9 +419,9 @@ export const startOfWeek = (d: PlainDate, startOn = 1): PlainDate => {
 export const UTC: TimeZone = { name: 'UTC', offsetMinutes: 0, dst: false };
 
 export const zone = (name: string): TimeZone => {
-  if (!(name in TZ_DB)) return UTC; // Return UTC as fallback instead of throwing
   const record = TZ_DB[name];
-  return { name, offsetMinutes: record?.baseOffset ?? 0, dst: false };
+  if (!record) return UTC; // Return UTC as fallback instead of throwing
+  return { name, offsetMinutes: record.baseOffset, dst: false };
 };
 
 export const withZone =

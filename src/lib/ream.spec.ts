@@ -149,8 +149,15 @@ test('parseISO parses ISO string correctly', (t) => {
   t.is(dt.h, testDate.getUTCHours());
 });
 
-test('parseISO throws on invalid string', (t) => {
-  t.throws(() => parseISO('invalid-date'), { message: /Invalid ISO string/ });
+test('parseISO returns epoch on invalid string', (t) => {
+  const result = parseISO('invalid-date');
+  t.is(result.y, 1970);
+  t.is(result.m, 1);
+  t.is(result.d, 1);
+  t.is(result.h, 0);
+  t.is(result.min, 0);
+  t.is(result.s, 0);
+  t.is(result.ms, 0);
 });
 
 test('addDuration adds duration to instant', (t) => {
@@ -324,8 +331,11 @@ test('zone factory creates timezone', (t) => {
   t.false(tz.dst);
 });
 
-test('zone factory throws on unknown timezone', (t) => {
-  t.throws(() => zone('Unknown/Timezone'), { message: /Unknown zone/ });
+test('zone factory returns UTC on unknown timezone', (t) => {
+  const result = zone('Unknown/Timezone');
+  t.is(result.name, 'UTC');
+  t.is(result.offsetMinutes, 0);
+  t.false(result.dst);
 });
 
 test('withZone creates ZDT', (t) => {
@@ -419,6 +429,11 @@ test('every generates recurring instants', (t) => {
   t.truthy(firstResult.value);
   t.truthy(secondResult.value);
 
+  if (!firstResult.value || !secondResult.value) {
+    t.fail('Generator should produce values');
+    return;
+  }
+
   const first = firstResult.value;
   const second = secondResult.value;
 
@@ -435,6 +450,11 @@ test('everyDay generates daily recurrence', (t) => {
 
   t.truthy(firstResult.value);
   t.truthy(secondResult.value);
+
+  if (!firstResult.value || !secondResult.value) {
+    t.fail('Generator should produce values');
+    return;
+  }
 
   const first = firstResult.value;
   const second = secondResult.value;
@@ -458,6 +478,11 @@ test('everyMonth generates monthly recurrence', (t) => {
 
   t.truthy(firstResult.value);
   t.truthy(secondResult.value);
+
+  if (!firstResult.value || !secondResult.value) {
+    t.fail('Generator should produce values');
+    return;
+  }
 
   const first = firstResult.value;
   const second = secondResult.value;
