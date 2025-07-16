@@ -12,6 +12,7 @@
     "resolveJsonModule": true /* Include modules imported with .json extension. */,
 
     "strict": true /* Enable all strict type-checking options. */,
+    "skipLibCheck": true /* Skip type checking of declaration files. */,
 
     /* Strict Type-Checking Options */
     // "noImplicitAny": true /* Raise error on expressions and declarations with an implied 'any' type. */,
@@ -38,8 +39,8 @@
     // "emitDecoratorMetadata": true /* Enables experimental support for emitting type metadata for decorators. */,
 
     "lib": ["es2017", "dom"],
-    "types": ["node"],
-    "typeRoots": ["node_modules/@types", "src/types"]
+    "types": [],
+    "typeRoots": ["src/types"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules/**"],
