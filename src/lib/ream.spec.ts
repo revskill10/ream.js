@@ -20,10 +20,15 @@ import {
   format,
   formatToken,
   fromPlain,
+  getAvailableTimezones,
+  getTimezoneInfo,
+  getTimezoneOffset,
   humanize,
   instant,
   interval,
+  isDST,
   isLeap,
+  isValidTimezone,
   MILLIS,
   now,
   offset,
@@ -34,8 +39,10 @@ import {
   sub,
   toPlain,
   toUTC,
+  toZone,
   UTC,
   withZone,
+  withZoneName,
   zdt,
   zero,
   zfmap,
@@ -324,11 +331,12 @@ test('UTC timezone is correct', (t) => {
   t.false(UTC.dst);
 });
 
-test('zone factory creates timezone', (t) => {
+test('zone factory creates timezone with real TZDB', (t) => {
   const tz = zone('America/New_York');
   t.is(tz.name, 'America/New_York');
-  t.is(tz.offsetMinutes, -300);
-  t.false(tz.dst);
+  // Offset will be either -300 (EST) or -240 (EDT) depending on DST
+  t.true(tz.offsetMinutes === -300 || tz.offsetMinutes === -240);
+  t.truthy(tz.abbreviation);
 });
 
 test('zone factory returns UTC on unknown timezone', (t) => {
@@ -363,7 +371,83 @@ test('offset returns timezone offset as duration', (t) => {
   const zdtObj = withZone(tz)(dt);
   const offsetDur = offset(zdtObj);
 
-  t.is(offsetDur.ms, -300 * 60_000); // -5 hours in milliseconds
+  // Offset will be either -300 or -240 minutes depending on DST
+  const expectedMs = tz.offsetMinutes * 60_000;
+  t.is(offsetDur.ms, expectedMs);
+});
+
+/* ------------------------------------------------------------------ *
+ *  REAL TIMEZONE DATABASE TESTS
+ * ------------------------------------------------------------------ */
+
+test('getTimezoneInfo returns correct timezone data', (t) => {
+  const testInstant = instant(Date.UTC(2023, 6, 15, 12, 0, 0)); // July 15, 2023 (summer)
+  const tzInfo = getTimezoneInfo('America/New_York', testInstant);
+
+  t.is(tzInfo.name, 'America/New_York');
+  t.is(tzInfo.offsetMinutes, -240); // EDT in summer
+  t.true(tzInfo.dst);
+  t.truthy(tzInfo.abbreviation);
+});
+
+test('getTimezoneInfo handles winter time correctly', (t) => {
+  const testInstant = instant(Date.UTC(2023, 0, 15, 12, 0, 0)); // January 15, 2023 (winter)
+  const tzInfo = getTimezoneInfo('America/New_York', testInstant);
+
+  t.is(tzInfo.name, 'America/New_York');
+  t.is(tzInfo.offsetMinutes, -300); // EST in winter
+  t.false(tzInfo.dst);
+});
+
+test('isValidTimezone validates timezone names', (t) => {
+  t.true(isValidTimezone('America/New_York'));
+  t.true(isValidTimezone('Europe/London'));
+  t.true(isValidTimezone('UTC'));
+  t.false(isValidTimezone('Invalid/Timezone'));
+  t.false(isValidTimezone(''));
+});
+
+test('getAvailableTimezones returns timezone list', (t) => {
+  const timezones = getAvailableTimezones();
+  t.true(timezones.length > 0);
+  t.true(timezones.includes('UTC'));
+  t.true(timezones.includes('America/New_York'));
+  t.true(timezones.includes('Europe/London'));
+});
+
+test('isDST correctly identifies daylight saving time', (t) => {
+  const summerInstant = instant(Date.UTC(2023, 6, 15, 12, 0, 0)); // July
+  const winterInstant = instant(Date.UTC(2023, 0, 15, 12, 0, 0)); // January
+
+  t.true(isDST('America/New_York', summerInstant));
+  t.false(isDST('America/New_York', winterInstant));
+  t.false(isDST('UTC', summerInstant)); // UTC never has DST
+});
+
+test('getTimezoneOffset returns correct offset', (t) => {
+  const summerInstant = instant(Date.UTC(2023, 6, 15, 12, 0, 0));
+  const winterInstant = instant(Date.UTC(2023, 0, 15, 12, 0, 0));
+
+  t.is(getTimezoneOffset('America/New_York', summerInstant), -240); // EDT
+  t.is(getTimezoneOffset('America/New_York', winterInstant), -300); // EST
+  t.is(Math.abs(getTimezoneOffset('UTC')), 0); // Handle -0 vs 0
+});
+
+test('withZoneName creates ZDT with timezone name', (t) => {
+  const dt = dateTime(2023, 7, 15, 14, 30, 45, 123);
+  const zdtObj = withZoneName('Europe/London')(dt);
+
+  t.is(zdtObj.zone.name, 'Europe/London');
+  t.deepEqual(zdtObj.payload, dt);
+});
+
+test('toZone converts between timezones', (t) => {
+  const dt = dateTime(2023, 7, 15, 14, 30, 45, 123);
+  const nyZdt = withZoneName('America/New_York')(dt);
+  const londonZdt = toZone('Europe/London')(nyZdt);
+
+  t.is(londonZdt.zone.name, 'Europe/London');
+  t.not(londonZdt.zone.offsetMinutes, nyZdt.zone.offsetMinutes);
 });
 
 /* ------------------------------------------------------------------ *
@@ -495,6 +579,43 @@ test('everyMonth generates monthly recurrence', (t) => {
 });
 
 /* ------------------------------------------------------------------ *
+ *  REAMDATE TIMEZONE TESTS
+ * ------------------------------------------------------------------ */
+
+test('ReamDate timezone methods work correctly', (t) => {
+  const rd = ream('2023-07-15T14:30:45.123Z', 'America/New_York');
+
+  t.is(rd.timezone().name, 'America/New_York');
+  t.is(typeof rd.isDST(), 'boolean');
+  t.is(typeof rd.offset(), 'number');
+});
+
+test('ReamDate tz method changes timezone', (t) => {
+  const rd = ream('2023-07-15T14:30:45.123Z');
+  const nyRd = rd.tz('America/New_York');
+
+  t.is(nyRd.timezone().name, 'America/New_York');
+  t.not(nyRd.timezone().name, rd.timezone().name);
+});
+
+test('ReamDate utc method converts to UTC', (t) => {
+  const rd = ream('2023-07-15T14:30:45.123Z', 'America/New_York');
+  const utcRd = rd.utc();
+
+  t.is(utcRd.timezone().name, 'UTC');
+  t.is(utcRd.offset(), 0);
+  t.false(utcRd.isDST());
+});
+
+test('ReamDate preserves timezone info through operations', (t) => {
+  const rd = ream('2023-07-15T14:30:45.123Z', 'Europe/London');
+  const added = rd.add(1, 'hours');
+
+  t.is(added.timezone().name, 'Europe/London');
+  t.is(added.hour(), rd.hour() + 1);
+});
+
+/* ------------------------------------------------------------------ *
  *  PLUGIN TESTS
  * ------------------------------------------------------------------ */
 
@@ -600,7 +721,7 @@ test('ReamDate clone method works', (t) => {
   t.not(cloned, rd); // Different objects
 });
 
-test('ReamDate tz method changes timezone', (t) => {
+test('ReamDate tz method creates new instance', (t) => {
   const rd = ream('2023-07-15T14:30:45.123Z');
   const nyc = rd.tz('America/New_York');
 
@@ -608,7 +729,7 @@ test('ReamDate tz method changes timezone', (t) => {
   t.not(nyc, rd);
 });
 
-test('ReamDate utc method converts to UTC', (t) => {
+test('ReamDate utc method creates new instance', (t) => {
   const rd = ream('2023-07-15T14:30:45.123Z', 'America/New_York');
   const utc = rd.utc();
 

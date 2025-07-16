@@ -1,17 +1,19 @@
 # ream.js
 
-A comprehensive, functional datetime library for JavaScript/TypeScript with immutable data structures, timezone support, and a plugin system.
+A comprehensive, functional datetime library for JavaScript/TypeScript with immutable data structures, **real IANA timezone database support**, and a plugin system.
 
 ## Features
 
 - 🚀 **Functional Programming**: Pure functions and immutable data structures
-- 🌍 **Timezone Support**: IANA timezone handling with DST calculations
+- 🌍 **Real Timezone Database**: Full IANA timezone support with automatic DST detection
+- 🕐 **DST Handling**: Accurate daylight saving time transitions and calculations
 - 📅 **Calendar Arithmetic**: Safe date/time arithmetic with overflow handling
 - 🎨 **Formatting System**: Comprehensive token-based formatting with locale support
 - ⏱️ **Duration Operations**: Monoid operations and humanization
 - 🔄 **Recurrence Generators**: Flexible recurring date/time patterns
 - 🔌 **Plugin System**: Extensible architecture for custom functionality
 - 📦 **TypeScript**: Full TypeScript support with comprehensive type definitions
+- 🌐 **Zero Dependencies**: Uses built-in `Intl` API for timezone data
 
 ## Installation
 
@@ -73,6 +75,50 @@ npm run build
 # Watch mode for development
 npm run watch:test
 ```
+
+## Real Timezone Database Support
+
+ream.js includes comprehensive support for real IANA timezone data using the built-in JavaScript `Intl` API:
+
+```typescript
+import ream, { getTimezoneInfo, isDST, isValidTimezone } from 'ream.js';
+
+// Real timezone information
+const tzInfo = getTimezoneInfo('America/New_York', instant(Date.now()));
+console.log(tzInfo);
+// {
+//   name: 'America/New_York',
+//   offsetMinutes: -240,  // EDT (UTC-4) or -300 (EST, UTC-5)
+//   dst: true,           // true during daylight saving time
+//   abbreviation: 'EDT'  // timezone abbreviation
+// }
+
+// Enhanced ReamDate with timezone methods
+const date = ream('2023-07-15T14:30:00', 'America/New_York');
+console.log(date.timezone().name);        // 'America/New_York'
+console.log(date.timezone().abbreviation); // 'EDT'
+console.log(date.isDST());                // true
+console.log(date.offset());               // -240
+
+// Timezone validation and utilities
+console.log(isValidTimezone('America/New_York')); // true
+console.log(isDST('Europe/London'));              // depends on current date
+
+// Convert between timezones
+const utcDate = ream('2023-07-15T16:30:00Z');
+const nyDate = utcDate.tz('America/New_York');
+const londonDate = utcDate.tz('Europe/London');
+```
+
+### Features:
+- ✅ Real IANA timezone data (no external dependencies)
+- ✅ Automatic DST detection and handling
+- ✅ Timezone abbreviations (EST, EDT, GMT, BST, etc.)
+- ✅ Timezone validation
+- ✅ Support for all IANA timezone identifiers
+- ✅ Works in browsers and Node.js
+
+See [TIMEZONE_FEATURES.md](./TIMEZONE_FEATURES.md) for comprehensive documentation.
 
 ## Publishing
 

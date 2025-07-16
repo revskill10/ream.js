@@ -58,11 +58,16 @@ jobs:
       - name: Check if version matches tag
         run: |
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          # Extract tag version, handling both v1.0.0 and 1.0.0 formats
+          TAG_REF=${GITHUB_REF#refs/tags/}
+          TAG_VERSION=${TAG_REF#v}
+          echo "Package version: $PACKAGE_VERSION"
+          echo "Tag version: $TAG_VERSION"
           if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
             echo "Package version ($PACKAGE_VERSION) does not match tag version ($TAG_VERSION)"
             exit 1
           fi
+          echo "Version check passed!"
 
       - name: Publish to NPM
         run: npm publish

@@ -37,35 +37,131 @@ export type PlainTime = Readonly<{
 export type PlainDateTime = PlainDate & PlainTime;
 
 /* ------------------------------------------------------------------ *
- *  2.  TIME-ZONE  SYSTEM
+ *  2.  TIME-ZONE  SYSTEM  (Real IANA TZDB Support)
  * ------------------------------------------------------------------ */
 export type TimeZone = {
   readonly name: string; // IANA string (e.g. "America/New_York")
   readonly offsetMinutes: number; // current offset (minutes east of UTC)
   readonly dst: boolean; // is DST active?
+  readonly abbreviation?: string; // timezone abbreviation (e.g. "EST", "PDT")
 };
 
-/* DST table (for demo) — real library loads tzdb */
-export const TZ_DB: Record<
-  string,
-  { readonly baseOffset: number; readonly dstRules: string }
-> = {
-  UTC: { baseOffset: 0, dstRules: '' },
-  'Europe/London': { baseOffset: 0, dstRules: 'lastSunMar+1h,lastSunOct-1h' },
-  'America/New_York': {
-    baseOffset: -300,
-    dstRules: 'secondSunMar+1h,firstSunNov-1h',
-  },
+/* Real timezone data using Intl API */
+export const getTimezoneInfo = (tzName: string, instant: Instant): TimeZone => {
+  try {
+    // Validate timezone name using Intl API
+    new Intl.DateTimeFormat('en', { timeZone: tzName });
+
+    const date = new Date(instant.epochMs);
+
+    // Simple and reliable method using Date.prototype.toLocaleString
+    const utcTime = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const localTime = new Date(
+      date.toLocaleString('en-US', { timeZone: tzName })
+    );
+
+    // Calculate offset in minutes (Local - UTC, negated to match standard convention)
+    const offsetMinutes = -Math.round(
+      (utcTime.getTime() - localTime.getTime()) / (1000 * 60)
+    );
+
+    // Determine if DST is active by comparing with standard time
+    const year = date.getFullYear();
+    const januaryDate = new Date(year, 0, 1, 12, 0, 0);
+    const julyDate = new Date(year, 6, 1, 12, 0, 0);
+
+    const getOffsetForDate = (testDate: Date): number => {
+      const utcTest = new Date(
+        testDate.toLocaleString('en-US', { timeZone: 'UTC' })
+      );
+      const localTest = new Date(
+        testDate.toLocaleString('en-US', { timeZone: tzName })
+      );
+      return -Math.round(
+        (utcTest.getTime() - localTest.getTime()) / (1000 * 60)
+      );
+    };
+
+    const janOffset = getOffsetForDate(januaryDate);
+    const julOffset = getOffsetForDate(julyDate);
+
+    // For northern hemisphere timezones like America/New_York:
+    // - Winter (January) is standard time (more negative offset, e.g., -300 for EST)
+    // - Summer (July) is DST (less negative offset, e.g., -240 for EDT)
+    // Standard time is the more negative offset (smaller value)
+    const standardOffset = Math.min(janOffset, julOffset);
+    const dst = offsetMinutes > standardOffset;
+
+    // Get timezone abbreviation
+    const abbreviation = new Intl.DateTimeFormat('en', {
+      timeZone: tzName,
+      timeZoneName: 'short',
+    })
+      .formatToParts(date)
+      .find((part) => part.type === 'timeZoneName')?.value;
+
+    return {
+      name: tzName,
+      offsetMinutes,
+      dst,
+      abbreviation,
+    };
+  } catch {
+    // Fallback to UTC for invalid timezone names
+    return {
+      name: 'UTC',
+      offsetMinutes: 0,
+      dst: false,
+      abbreviation: 'UTC',
+    };
+  }
 };
 
-/* compute offset for any instant */
-export const tzOffset = (tz: string, _i: Instant): number => {
-  const record = TZ_DB[tz];
-  if (!record) return 0; // Return default instead of throwing
-  /* simplified example — in reality we parse tzdb */
-  /* … DST rule evaluation … */
-  // In a real implementation, we would use the instant '_i' for DST calculations
-  return record.baseOffset;
+/* compute offset for any instant using real TZDB */
+export const tzOffset = (tz: string, i: Instant): number => {
+  const tzInfo = getTimezoneInfo(tz, i);
+  return tzInfo.offsetMinutes;
+};
+
+/* Get list of available timezones */
+export const getAvailableTimezones = (): readonly string[] => {
+  // Common IANA timezone identifiers
+  return Object.freeze([
+    'UTC',
+    'America/New_York',
+    'America/Chicago',
+    'America/Denver',
+    'America/Los_Angeles',
+    'America/Toronto',
+    'America/Vancouver',
+    'America/Mexico_City',
+    'America/Sao_Paulo',
+    'America/Argentina/Buenos_Aires',
+    'Europe/London',
+    'Europe/Paris',
+    'Europe/Berlin',
+    'Europe/Rome',
+    'Europe/Madrid',
+    'Europe/Amsterdam',
+    'Europe/Stockholm',
+    'Europe/Moscow',
+    'Asia/Tokyo',
+    'Asia/Shanghai',
+    'Asia/Hong_Kong',
+    'Asia/Singapore',
+    'Asia/Mumbai',
+    'Asia/Dubai',
+    'Asia/Seoul',
+    'Asia/Bangkok',
+    'Australia/Sydney',
+    'Australia/Melbourne',
+    'Australia/Perth',
+    'Pacific/Auckland',
+    'Pacific/Honolulu',
+    'Africa/Cairo',
+    'Africa/Johannesburg',
+    'Africa/Lagos',
+  ]);
 };
 
 /* ------------------------------------------------------------------ *
@@ -418,16 +514,22 @@ export const startOfWeek = (d: PlainDate, startOn = 1): PlainDate => {
  * ------------------------------------------------------------------ */
 export const UTC: TimeZone = { name: 'UTC', offsetMinutes: 0, dst: false };
 
-export const zone = (name: string): TimeZone => {
-  const record = TZ_DB[name];
-  if (!record) return UTC; // Return UTC as fallback instead of throwing
-  return { name, offsetMinutes: record.baseOffset, dst: false };
+export const zone = (name: string, instant: Instant = now()): TimeZone => {
+  return getTimezoneInfo(name, instant);
 };
 
 export const withZone =
   (z: TimeZone) =>
   (dt: PlainDateTime): ZDT<PlainDateTime> =>
     zdt(fromPlain(dt), z, dt);
+
+export const withZoneName =
+  (zoneName: string) =>
+  (dt: PlainDateTime): ZDT<PlainDateTime> => {
+    const instant = fromPlain(dt);
+    const tz = zone(zoneName, instant);
+    return zdt(instant, tz, dt);
+  };
 
 export const toUTC = (zdtObj: ZDT<PlainDateTime>): ZDT<PlainDateTime> =>
   zdt(
@@ -436,8 +538,40 @@ export const toUTC = (zdtObj: ZDT<PlainDateTime>): ZDT<PlainDateTime> =>
     zdtObj.payload
   );
 
+export const toZone =
+  (zoneName: string) =>
+  (zdtObj: ZDT<PlainDateTime>): ZDT<PlainDateTime> => {
+    const newZone = zone(zoneName, zdtObj.instant);
+    const adjustedMs =
+      zdtObj.instant.epochMs +
+      (newZone.offsetMinutes - zdtObj.zone.offsetMinutes) * 60_000;
+    return zdt(instant(adjustedMs), newZone, zdtObj.payload);
+  };
+
 export const offset = (zdtObj: ZDT<PlainDateTime>): Duration =>
   duration(zdtObj.zone.offsetMinutes * 60_000);
+
+/* Timezone utility functions */
+export const isValidTimezone = (tzName: string): boolean => {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tzName });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const getTimezoneOffset = (
+  tzName: string,
+  instant: Instant = now()
+): number => {
+  return tzOffset(tzName, instant);
+};
+
+export const isDST = (tzName: string, instant: Instant = now()): boolean => {
+  const tzInfo = getTimezoneInfo(tzName, instant);
+  return tzInfo.dst;
+};
 
 /* ------------------------------------------------------------------ *
  *  11.  RANGE / INTERVAL  (functor)
@@ -532,6 +666,9 @@ export type ReamDate = {
   /* Timezone */
   readonly tz: (name: string) => ReamDate;
   readonly utc: () => ReamDate;
+  readonly timezone: () => TimeZone;
+  readonly isDST: () => boolean;
+  readonly offset: () => number;
   /* Conversion */
   readonly valueOf: () => number;
 };
@@ -601,8 +738,11 @@ const makeReam = (instant: Instant, timeZone: TimeZone): ReamDate => ({
     format('dddd, MMMM D, YYYY h:mm A', toPlain(instant), l),
 
   /* timezone */
-  tz: (name) => makeReam(instant, zone(name)),
+  tz: (name) => makeReam(instant, zone(name, instant)),
   utc: () => makeReam(instant, UTC),
+  timezone: () => timeZone,
+  isDST: () => timeZone.dst,
+  offset: () => timeZone.offsetMinutes,
 
   valueOf: () => instant.epochMs,
 });
